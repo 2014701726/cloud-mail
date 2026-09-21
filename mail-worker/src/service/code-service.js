@@ -27,18 +27,19 @@ export async function codeResponse(url, env) {
     }
     if (!recipient) return json({ messages: [], server_time: now.toISOString() });
     const allowedDomains = configuredDomains(env);
-    const domain = (domains[0] || allowedDomains[0] || '').toLowerCase();
-    if (!allowedDomains.includes(domain)) return json({ error: '未配置此收件域名' }, 400);
+    const domain = (domains[0] || '').toLowerCase();
+    if (!allowedDomains.length || (domain && !allowedDomains.includes(domain))) return json({ error: '未配置此收件域名' }, 400);
     const all = Boolean(env.code_all_recipient) && recipient === env.code_all_recipient;
     const stamp = date => date.toISOString().slice(0, 19).replace('T', ' ');
-    const filters = ["type = 0", "status = 0", "is_del = 0", "code <> ''", 'create_time >= ?', 'create_time <= ?'];
+    const filters = ["type = 0", "status IN (0, 7)", "is_del = 0", "code <> ''", 'create_time >= ?', 'create_time <= ?'];
     const args = [stamp(new Date(now.getTime() - 300000)), stamp(now)];
     if (all) {
         filters.push(`lower(substr(to_email, instr(to_email, '@') + 1)) IN (${allowedDomains.map(() => '?').join(',')})`);
         args.push(...allowedDomains);
     } else {
-        filters.push('to_email COLLATE NOCASE = ?');
-        args.push(`${recipient.toLowerCase()}@${domain}`);
+        const selectedDomains = domain ? [domain] : allowedDomains;
+        filters.push(`to_email COLLATE NOCASE IN (${selectedDomains.map(() => '?').join(',')})`);
+        args.push(...selectedDomains.map(value => `${recipient.toLowerCase()}@${value}`));
     }
     const senders = arraySetting(env.code_allowed_senders).map(s => String(s).trim().toLowerCase()).filter(Boolean);
     if (senders.length) {
