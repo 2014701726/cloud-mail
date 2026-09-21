@@ -36,6 +36,10 @@ crons = ["0 * * * *"]	#每小时执行；resetDaySendCount 仅在 UTC 0 点生�
 
 
 [vars]
+catch_all_admin = true      # 未创建地址的邮件归入管理员主邮箱
+public_codes = true         # 开放 /codes 和 /api/codes 免登录查询
+code_all_recipient = ""     # 非空时，此 recipient 值查询所有配置域名的收件人
+code_allowed_senders = []   # 留空允许任意发件人；可填完整地址列表
 #ai_model = ""			#ai模型,不填默认使用@cf/meta/llama-3.1-8b-instruct-fast
 #analysis_cache = false			#是否开启分析数据缓存
 #orm_log = false			#是否sql日志

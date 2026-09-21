@@ -32,6 +32,14 @@ const dbInit = {
 		await this.v3_1DB(c);
 		await this.v3_2DB(c);
 		await this.v3_3DB(c);
+		await c.env.db.batch([
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_code_recipient_time
+				ON email(to_email COLLATE NOCASE, create_time DESC, email_id DESC)
+				WHERE type = 0 AND status = 0 AND is_del = 0 AND code <> ''`),
+			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_code_time
+				ON email(create_time DESC, email_id DESC)
+				WHERE type = 0 AND status = 0 AND is_del = 0 AND code <> ''`)
+		]);
 		await settingService.refresh(c);
 		return c.text('success');
 	},

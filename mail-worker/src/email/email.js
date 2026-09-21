@@ -1,4 +1,5 @@
 import PostalMime from 'postal-mime';
+import { configuredDomains, extractVerificationCode } from '../service/code-service';
 import emailService from '../service/email-service';
 import accountService from '../service/account-service';
 import settingService from '../service/setting-service';
@@ -43,15 +44,18 @@ export async function email(message, env, ctx) {
 			return;
 		}
 
+		const receivedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
 		const reader = message.raw.getReader();
+		const decoder = new TextDecoder();
 		let content = '';
 
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
-			content += new TextDecoder().decode(value);
+			content += decoder.decode(value, { stream: true });
 		}
 
+		content += decoder.decode();
 		const email = await PostalMime.parse(content);
 
 
@@ -69,6 +73,18 @@ export async function email(message, env, ctx) {
 			if (baseEmail && baseEmail !== message.to) {
 				account = await accountService.selectByEmailIncludeDel({ env: env }, baseEmail);
 			}
+		}
+
+		// 未注册地址归入管理员主邮箱，不创建虚拟用户或占用邮箱数量配额。
+		if (!account && String(env.catch_all_admin) === 'true' &&
+			configuredDomains(env).includes(emailUtils.getDomain(message.to).toLowerCase())) {
+			const adminUser = await userService.selectByEmail({ env }, env.admin);
+			const adminAccount = await accountService.selectByEmailIncludeDel({ env }, env.admin);
+			if (!adminUser || !adminAccount || adminAccount.isDel !== isDel.NORMAL ||
+				adminAccount.userId !== adminUser.userId) {
+				throw new Error('Catch-all administrator must be initialized before receiving mail');
+			}
+			account = adminAccount;
 		}
 
 		if (!account && noRecipient === settingConst.noRecipient.CLOSE) {
@@ -104,10 +120,11 @@ export async function email(message, env, ctx) {
 		}
 
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
-		const code = await aiService.extractCode({ env }, email, { aiCode, aiCodeFilter });
+		const code = extractVerificationCode(email) || await aiService.extractCode({ env }, email, { aiCode, aiCodeFilter });
 
 		const params = {
-			toEmail: message.to,
+			toEmail: message.to.toLowerCase(),
+			createTime: receivedAt,
 			toName: toName,
 			sendEmail: email.from.address,
 			name: email.from.name || emailUtils.getName(email.from.address),

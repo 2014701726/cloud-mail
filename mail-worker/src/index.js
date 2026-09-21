@@ -1,3 +1,5 @@
+import { codeResponse } from './service/code-service';
+import codePage from './template/code-page';
 import app from './hono/webs';
 import { email } from './email/email';
 import userService from './service/user-service';
@@ -10,6 +12,18 @@ export default {
 	 async fetch(req, env, ctx) {
 
 		const url = new URL(req.url)
+
+        // 独立免登录验证码页面；其余后台接口仍走原来的权限校验。
+        if (url.pathname === '/codes' || url.pathname === '/codes/' || url.pathname === '/api/codes') {
+            if (req.method !== 'GET') return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET' } });
+            if (String(env.public_codes) !== 'true') return new Response('Not found', { status: 404 });
+            if (url.pathname === '/api/codes') return codeResponse(url, env);
+            return new Response(codePage, { headers: {
+                'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+                'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
+                'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+            } });
+        }
 
 		if (url.pathname.startsWith('/api/')) {
 			url.pathname = url.pathname.replace('/api', '')
