@@ -42,15 +42,21 @@ function render() {
     text.append(code, time); row.append(text, button); list.append(row);
   }
 }
+let nextPollAt = 0, emptyCount = 0, failures = 0, permanentError = false;
 async function refresh() {
-  if (loading || document.hidden) return;
+  if (loading || document.hidden || permanentError || Date.now() < nextPollAt) return;
   if (!query.get('recipient')) { notice.textContent = '请在链接中添加 ?recipient=邮箱前缀的32位MD5'; render(); return; }
   loading = true; const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch('/api/codes?' + query.toString(), {cache:'no-store',signal:controller.signal});
+    if ([400, 404, 405].includes(response.status)) permanentError = true;
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    if (retryAfter > 0) nextPollAt = Date.now() + retryAfter * 1000;
     const data = await response.json(); if (!response.ok) throw new Error(data.error || '读取失败');
+    failures = 0; emptyCount = data.messages.length ? 0 : emptyCount + 1;
+    nextPollAt = Date.now() + (emptyCount > 30 ? 15000 : emptyCount > 5 ? 5000 : 3000);
     items = data.messages; serverTime = Date.parse(data.server_time); tick = performance.now(); notice.textContent = ''; render();
-  } catch(error) { notice.textContent = error.name === 'AbortError' ? '连接超时，正在重试' : error.message; }
+  } catch(error) { failures++; nextPollAt = Math.max(nextPollAt, Date.now() + Math.min(60000, 5000 * 2 ** Math.min(failures - 1, 4))); notice.textContent = error.name === 'AbortError' ? '连接超时，正在重试' : error.message; }
   finally { clearTimeout(timer); loading = false; }
 }
 refresh(); setInterval(render, 1000); setInterval(refresh, 2000);

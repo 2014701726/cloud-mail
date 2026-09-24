@@ -32,6 +32,13 @@ const dbInit = {
 		await this.v3_1DB(c);
 		await this.v3_2DB(c);
 		await this.v3_3DB(c);
+        const columns = await c.env.db.prepare('PRAGMA table_info(email)').all();
+        if (!columns.results.some(column => column.name === 'recipient_hash')) {
+            await c.env.db.prepare("ALTER TABLE email ADD COLUMN recipient_hash TEXT NOT NULL DEFAULT ''").run();
+        }
+        await c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_code_hash_time
+            ON email(recipient_hash, create_time DESC, email_id DESC)
+            WHERE type = 0 AND status IN (0, 7) AND is_del = 0 AND code <> ''`).run();
 		await c.env.db.batch([
 			c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_email_code_recipient_time_v2
 				ON email(to_email COLLATE NOCASE, create_time DESC, email_id DESC)

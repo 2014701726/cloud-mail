@@ -1,5 +1,8 @@
 import emailUtils from '../utils/email-utils';
 
+// 单个 Worker 实例短暂熔断，避免配额耗尽时重复访问 D1。
+let databaseRetryAt = 0;
+
 export function configuredDomains(env) {
     return arraySetting(env.domain).map(value => String(value).trim().toLowerCase()).filter(Boolean);
 }
@@ -24,7 +27,8 @@ export function extractVerificationCode(email) {
 export async function codeResponse(url, env) {
     const now = new Date();
     const json = (data, status = 200) => Response.json(data, { status, headers: {
-        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'
+        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+        ...(status === 503 ? { 'Retry-After': String(Math.max(5, Math.ceil((databaseRetryAt - Date.now()) / 1000))) } : {})
     } });
     const values = url.searchParams.getAll('recipient');
     const domains = url.searchParams.getAll('domain');
@@ -48,32 +52,24 @@ export async function codeResponse(url, env) {
         filters.push(`lower(send_email) IN (${senders.map(() => '?').join(',')})`);
         args.push(...senders);
     }
+    if (Date.now() < databaseRetryAt) return json({ error: '数据库暂不可用，请稍后重试' }, 503);
     try {
         if (!all) {
-            // 仅对五分钟窗口内符合条件的不同地址计算哈希；无需数据库迁移，已有邮件立即兼容。
-            // 先匹配全部候选地址再 LIMIT 5，避免其他收件人的邮件挤掉当前收件人。
-            const candidates = await env.db.prepare(`SELECT DISTINCT to_email FROM email
-                WHERE ${filters.join(' AND ')}`).bind(...args).all();
-            const matched = [];
-            const hashes = new Map();
-            for (const row of candidates.results) {
-                const prefix = row.to_email.slice(0, row.to_email.lastIndexOf('@'));
-                if (!hashes.has(prefix)) hashes.set(prefix, await recipientDigest(prefix));
-                if (hashes.get(prefix) === recipient) matched.push(row.to_email);
-            }
-            if (!matched.length) return json({ messages: [], server_time: now.toISOString() });
-            // JSON 参数避免多域名时超过 D1 的 SQL 绑定参数数量限制。
-            filters.push('to_email IN (SELECT value FROM json_each(?))');
-            args.push(JSON.stringify(matched));
+            filters.push('recipient_hash = ?');
+            args.push(recipient);
         }
-        const { results } = await env.db.prepare(`SELECT email_id, code, create_time FROM email
+        const { results, meta } = await env.db.prepare(`SELECT email_id, code, create_time FROM email
+            INDEXED BY ${all ? 'idx_email_code_time_v2' : 'idx_email_code_hash_time'}
             WHERE ${filters.join(' AND ')} ORDER BY create_time DESC, email_id DESC LIMIT 5`).bind(...args).all();
+        if (meta?.rows_read > 100) console.warn('Code query rows_read', meta.rows_read, 'all', all);
         return json({ server_time: now.toISOString(), messages: results.map(row => {
             const received = new Date(row.create_time.replace(' ', 'T') + 'Z');
             return { id: row.email_id, code: row.code, received_at: received.toISOString(),
                 expires_at: new Date(received.getTime() + 300000).toISOString() };
         }) });
     } catch (error) {
+        const reason = String(error.message || '') + ' ' + String(error.cause?.message || '');
+        databaseRetryAt = Date.now() + (/daily|limit|quota|exceeded/i.test(reason) ? 60000 : 5000);
         console.error('Code lookup failed', error.name);
         return json({ error: '验证码暂时无法读取，请稍后重试' }, 503);
     }

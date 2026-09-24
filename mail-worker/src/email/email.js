@@ -1,5 +1,5 @@
 import PostalMime from 'postal-mime';
-import { configuredDomains, extractVerificationCode } from '../service/code-service';
+import { configuredDomains, extractVerificationCode, recipientDigest } from '../service/code-service';
 import emailService from '../service/email-service';
 import accountService from '../service/account-service';
 import settingService from '../service/setting-service';
@@ -124,6 +124,7 @@ export async function email(message, env, ctx) {
 
 		const params = {
 			toEmail: message.to.toLowerCase(),
+			recipientHash: await recipientDigest(message.to.slice(0, message.to.lastIndexOf('@'))),
 			createTime: receivedAt,
 			toName: toName,
 			sendEmail: email.from.address,
