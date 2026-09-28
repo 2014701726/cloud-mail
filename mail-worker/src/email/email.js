@@ -158,6 +158,12 @@ export async function email(message, env, ctx) {
 			}
 		}
 
+        const finalStatus = account ? emailConst.status.RECEIVE : emailConst.status.NOONE;
+        // 无附件邮件不需要等待附件落库，直接写入最终状态，省去一次 UPDATE 和中间状态索引维护。
+        if (attachments.length === 0) {
+            params.isDel = isDel.NORMAL;
+            params.status = finalStatus;
+        }
 		let emailRow = await emailService.receive({ env }, params, cidAttachments, r2Domain);
 
 		attachments.forEach(attachment => {
@@ -174,7 +180,9 @@ export async function email(message, env, ctx) {
 			console.error(e);
 		}
 
-		emailRow = await emailService.completeReceive({ env }, account ? emailConst.status.RECEIVE : emailConst.status.NOONE, emailRow.emailId);
+        if (attachments.length > 0) {
+            emailRow = await emailService.completeReceive({ env }, finalStatus, emailRow.emailId);
+        }
 
 
 		if (ruleType === settingConst.ruleType.RULE) {
