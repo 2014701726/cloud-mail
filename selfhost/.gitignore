@@ -1,0 +1,8 @@
+# 运行时数据：D1(SQLite) / KV / R2 全部落在这里
+data/
+smtp-certs/
+# 本地配置（含密钥）
+.env
+# 构建产物
+build/
+node_modules/

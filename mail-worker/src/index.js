@@ -8,10 +8,41 @@ import emailService from './service/email-service';
 import kvObjService from './service/kv-obj-service';
 import oauthService from './service/oauth-service';
 import analysisService from './service/analysis-service';
+import { handleIngest } from './selfhost/ingest';
+
+// 定时任务：Cloudflare Cron Triggers 与自建（Miniflare）共用同一段逻辑。
+async function runScheduled(cron, env, ctx) {
+	if (cron === '*/30 * * * *') {
+		await analysisService.refreshEchartsCache({ env })
+		return;
+	}
+
+	await verifyRecordService.clearRecord({ env })
+	await userService.resetDaySendCount({ env })
+	await emailService.completeReceiveAll({ env })
+	await emailService.autoClean({ env })
+	await analysisService.refreshEchartsCache({ env })
+	await oauthService.clearNoBindOathUser({ env })
+}
+
 export default {
 	 async fetch(req, env, ctx) {
 
 		const url = new URL(req.url)
+
+		// 自建部署专用内部接口：MTA 投递原始邮件、外部定时器触发 scheduled。
+		// 未配置 INGEST_SECRET 时完全关闭，Cloudflare 上的行为不受影响。
+		if (url.pathname === '/_internal/receive') {
+			return handleIngest(req, env, ctx);
+		}
+
+		if (url.pathname === '/_internal/scheduled') {
+			if (!env.INGEST_SECRET || req.headers.get('x-ingest-secret') !== env.INGEST_SECRET) {
+				return new Response('Unauthorized', { status: 401 });
+			}
+			await runScheduled(url.searchParams.get('cron') || '0 * * * *', env, ctx);
+			return Response.json({ ok: true });
+		}
 
         // 独立免登录验证码页面；其余后台接口仍走原来的权限校验。
         if (url.pathname === '/codes' || url.pathname === '/codes/' || url.pathname === '/api/codes') {
@@ -39,16 +70,6 @@ export default {
 	},
 	email: email,
 	async scheduled(c, env, ctx) {
-		if (c.cron === '*/30 * * * *') {
-			await analysisService.refreshEchartsCache({ env })
-			return;
-		}
-
-		await verifyRecordService.clearRecord({ env })
-		await userService.resetDaySendCount({ env })
-		await emailService.completeReceiveAll({ env })
-		await emailService.autoClean({ env })
-		await analysisService.refreshEchartsCache({ env })
-		await oauthService.clearNoBindOathUser({ env })
+		await runScheduled(c.cron, env, ctx);
 	},
 };

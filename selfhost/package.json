@@ -1,0 +1,19 @@
+{
+	"name": "cloud-mail-selfhost",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "在自有 Linux 服务器上运行 cloud-mail（Miniflare / workerd 本地运行时）",
+	"scripts": {
+		"start": "node server.mjs",
+		"smtp": "node smtp.mjs",
+		"build": "node build.mjs"
+	},
+	"dependencies": {
+		"miniflare": "4.20260507.1",
+		"smtp-server": "^3.13.6"
+	},
+	"devDependencies": {
+		"wrangler": "4.90.0"
+	}
+}

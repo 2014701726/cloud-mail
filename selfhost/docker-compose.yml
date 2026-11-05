@@ -1,0 +1,38 @@
+services:
+  cloud-mail:
+    build:
+      context: ..
+      dockerfile: selfhost/Dockerfile
+    image: cloud-mail:selfhost
+    container_name: cloud-mail
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      DATA_DIR: data
+      WORKER_URL: http://127.0.0.1:8787
+    # 只监听本机，由宿主机 Nginx 反代；如果不用 Nginx，可改成 8787:8787
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./data:/app/selfhost/data
+
+  # 可选：内置 SMTP 收信。宿主机已有 Postfix 时不要启动该服务。
+  smtp:
+    image: cloud-mail:selfhost
+    container_name: cloud-mail-smtp
+    restart: unless-stopped
+    command: ["node", "smtp.mjs"]
+    depends_on:
+      - cloud-mail
+    env_file: .env
+    environment:
+      WORKER_URL: http://cloud-mail:8787
+      SMTP_PORT: "25"
+      SMTP_HOST: 0.0.0.0
+    ports:
+      - "25:25"
+    volumes:
+      - ./smtp-certs:/certs:ro
+    profiles: ["smtp"]

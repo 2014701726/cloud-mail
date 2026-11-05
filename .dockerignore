@@ -1,0 +1,11 @@
+# Docker 构建上下文排除项（context = cloud-mail/）
+**/node_modules
+**/.wrangler
+**/dist
+**/.env
+**/*.log
+selfhost/data
+selfhost/data-test
+selfhost/build
+selfhost/smtp-certs
+selfhost/pipe-test.eml

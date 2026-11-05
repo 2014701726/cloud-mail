@@ -1,0 +1,46 @@
+name = "cloud-mail"
+main = "src/index.js"
+compatibility_date = "2025-06-04"
+keep_vars = true
+
+# ---------------------------------------------------------------------------
+# 自建（Linux / Docker）部署配置：使用 Miniflare 本地模拟 D1 / KV / R2，
+# 不再需要 Cloudflare 账号。发送邮件走 Resend 或自建 SMTP 中继；
+# 收信由 Postfix 投递到 selfhost/ingest.mjs，再 POST 到 /_internal/receive。
+# ---------------------------------------------------------------------------
+
+[[d1_databases]]
+binding = "db"
+database_name = "cloud-mail"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[kv_namespaces]]
+binding = "kv"
+id = "cloud-mail-kv"
+
+[[r2_buckets]]
+binding = "r2"
+bucket_name = "cloud-mail-r2"
+
+[assets]
+binding = "assets"
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+catch_all_admin = true
+public_codes = true
+code_all_recipient = "all"
+code_allowed_senders = []
+# 自建时必须显式配置的变量
+# domain = ["your-domain.com"]
+# admin = "admin@your-domain.com"
+# jwt_secret = "请改成随机字符串"
+# ai_model = ""
+
+[observability]
+enabled = true

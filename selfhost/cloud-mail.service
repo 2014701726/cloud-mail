@@ -1,0 +1,22 @@
+[Unit]
+Description=Cloud Mail (self-hosted on workerd)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cloudmail
+Group=cloudmail
+WorkingDirectory=/opt/cloud-mail/selfhost
+EnvironmentFile=/opt/cloud-mail/selfhost/.env
+ExecStart=/usr/bin/node /opt/cloud-mail/selfhost/server.mjs
+Restart=always
+RestartSec=5
+# 数据目录需要可写
+ReadWritePaths=/opt/cloud-mail/selfhost/data
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
