@@ -17,6 +17,12 @@ services:
       - "127.0.0.1:8787:8787"
     volumes:
       - ./data:/app/selfhost/data
+      # 代码与构建产物挂载：改完代码只需重启容器，不必重建镜像
+      - ./build:/app/selfhost/build:ro
+      - ../mail-worker/dist:/app/mail-worker/dist:ro
+      - ./server.mjs:/app/selfhost/server.mjs:ro
+      - ./smtp.mjs:/app/selfhost/smtp.mjs:ro
+      - ./ingest.mjs:/app/selfhost/ingest.mjs:ro
 
   # 可选：内置 SMTP 收信。宿主机已有 Postfix 时不要启动该服务。
   smtp:

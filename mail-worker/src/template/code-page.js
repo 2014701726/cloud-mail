@@ -45,7 +45,7 @@ function render() {
 let nextPollAt = 0, emptyCount = 0, failures = 0, permanentError = false;
 async function refresh() {
   if (loading || document.hidden || permanentError || Date.now() < nextPollAt) return;
-  if (!query.get('recipient')) { notice.textContent = '请在链接中添加 ?recipient=邮箱前缀的32位MD5'; render(); return; }
+  if (!query.get('recipient')) { render(); return; }
   loading = true; const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch('/api/codes?' + query.toString(), {cache:'no-store',signal:controller.signal});
